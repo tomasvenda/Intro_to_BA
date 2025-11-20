@@ -1,0 +1,4 @@
+*.csv
+*.parquet
+Trips_2018.*
+*.zip
