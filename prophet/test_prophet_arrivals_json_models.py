@@ -4,6 +4,7 @@ import os
 import re
 import sys
 import warnings
+import time
 from typing import Dict, List, Optional
 
 import numpy as np
@@ -37,6 +38,9 @@ def parse_args():
 
     p.add_argument("--hard_cutoff", type=str, default=str(HARD_CUTOFF_DEFAULT))
     p.add_argument("--save_hourly", action="store_true")
+    p.add_argument("--recent_minutes", type=int, default=0,
+               help="If >0, only evaluate model JSON files modified in last N minutes.")
+
 
     return p.parse_args()
 
@@ -63,19 +67,35 @@ def extract_cluster_from_filename(path: str) -> Optional[int]:
     return int(m.group("cluster"))
 
 
-def list_model_files(models_dir: str) -> List[str]:
+def list_model_files(models_dir: str, recent_minutes: int = 0) -> List[str]:
     if not os.path.isdir(models_dir):
         raise FileNotFoundError(f"models_dir not found: {models_dir}")
+
+    now = time.time()
+    cutoff = now - (recent_minutes * 60) if recent_minutes and recent_minutes > 0 else None
+
     files = []
     for fn in os.listdir(models_dir):
         if not fn.endswith(".json"):
             continue
         if fn.endswith("_meta.json"):
             continue
+
         fp = os.path.join(models_dir, fn)
-        if extract_cluster_from_filename(fp) is not None:
-            files.append(fp)
+        if extract_cluster_from_filename(fp) is None:
+            continue
+
+        if cutoff is not None:
+            try:
+                if os.path.getmtime(fp) < cutoff:
+                    continue
+            except OSError:
+                continue
+
+        files.append(fp)
+
     return sorted(files)
+
 
 
 def load_prophet_model_json(path: str):
@@ -137,6 +157,21 @@ def add_time_regressors(df_: pd.DataFrame) -> pd.DataFrame:
 
     return df_
 
+def build_future(model, ds: pd.Series) -> pd.DataFrame:
+    future = pd.DataFrame({"ds": pd.to_datetime(ds)})
+    future = add_time_regressors(future)
+
+    # Ensure all required regressors exist
+    needed = list(getattr(model, "extra_regressors", {}).keys())
+    for col in needed:
+        if col not in future.columns:
+            future[col] = 0
+
+    # Optional: drop any extra columns (keeps things tidy)
+    keep = ["ds"] + needed
+    return future[keep]
+
+
 def main():
     args = parse_args()
     os.makedirs(args.output_dir, exist_ok=True)
@@ -166,9 +201,12 @@ def main():
 
     df["__month__"] = df[args.time_col].dt.month
 
-    model_files = list_model_files(args.models_dir)
+    model_files = list_model_files(args.models_dir, args.recent_minutes)
     if not model_files:
+        if args.recent_minutes and args.recent_minutes > 0:
+            sys.exit(f"ERROR: No model json files in {args.models_dir} modified in last {args.recent_minutes} minutes")
         sys.exit(f"ERROR: No model json files found in {args.models_dir}")
+
 
     cluster_to_models: Dict[int, List[str]] = {cid: [] for cid in wanted}
     for mp in model_files:
@@ -196,8 +234,17 @@ def main():
                    .reset_index(drop=True)
         )
 
-        ts = pd.DatetimeIndex(test_df[args.time_col].to_numpy())
-        y_true = test_df[args.target_col].to_numpy(dtype=float)
+        test_df = test_df.rename(columns={args.time_col: "ds", args.target_col: "y"})
+        test_df["ds"] = pd.to_datetime(test_df["ds"])
+
+        full = pd.date_range(test_df["ds"].min(), test_df["ds"].max(), freq="H")
+        test_df = (test_df.set_index("ds")
+                          .reindex(full, fill_value=0)   # or keep NaN if “missing != 0”
+                          .rename_axis("ds")
+                          .reset_index())
+        
+        ts = test_df["ds"]
+        y_true = test_df["y"].to_numpy(dtype=float)
 
         model_paths = cluster_to_models.get(cid, [])
         if not model_paths:
@@ -215,8 +262,8 @@ def main():
                 })
                 continue
 
-            future = pd.DataFrame({"ds": ts})
-            future = add_time_regressors(future)  # must produce same regressor cols
+            future = build_future(model, ts)
+
 
             try:
                 fc = model.predict(future)

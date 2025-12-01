@@ -106,20 +106,41 @@ def load_and_prep_data(filepath: str) -> Dict[str, Dict[str, pd.DataFrame]]:
 
 def add_time_regressors(df_: pd.DataFrame) -> pd.DataFrame:
     df_ = df_.copy()
+
+    # Basic calendar fields
     df_["dow"] = df_["ds"].dt.dayofweek  # 0=Mon ... 6=Sun
     df_["is_weekend"] = (df_["dow"] >= 5).astype(int)
+    df_["hour"] = df_["ds"].dt.hour
 
-    dummies = pd.get_dummies(df_["dow"], prefix="dow", dtype=int)
-
-    # Ensure all dow_0..dow_6 exist (important!)
-    for i in range(7):
+    # ---------- DOW dummies (drop one to avoid collinearity) ----------
+    dow_d = pd.get_dummies(df_["dow"], prefix="dow", drop_first=True, dtype=int)
+    # Ensures consistent columns dow_1..dow_6
+    for i in range(1, 7):
         col = f"dow_{i}"
-        if col not in dummies.columns:
-            dummies[col] = 0
+        if col not in dow_d.columns:
+            dow_d[col] = 0
+    dow_d = dow_d[[f"dow_{i}" for i in range(1, 7)]]
 
-    dummies = dummies[[f"dow_{i}" for i in range(7)]]
-    df_ = pd.concat([df_.drop(columns=["dow"]), dummies], axis=1)
+    # ---------- Hour-of-day dummies (drop one) ----------
+    hr_d = pd.get_dummies(df_["hour"], prefix="hr", drop_first=True, dtype=int)
+    # Ensures consistent columns hr_1..hr_23
+    for h in range(1, 24):
+        col = f"hr_{h}"
+        if col not in hr_d.columns:
+            hr_d[col] = 0
+    hr_d = hr_d[[f"hr_{h}" for h in range(1, 24)]]
+
+    # ---------- Interaction: hour × weekend ----------
+    # Lets weekends have a DIFFERENT hourly shape than weekdays.
+    wk_hr_d = hr_d.mul(df_["is_weekend"], axis=0)
+    wk_hr_d.columns = [c + "_wknd" for c in wk_hr_d.columns]
+
+    # Assemble
+    df_ = df_.drop(columns=["dow", "hour"])
+    df_ = pd.concat([df_, dow_d, hr_d, wk_hr_d], axis=1)
+
     return df_
+
 
 
 def train_models(args):
@@ -149,9 +170,14 @@ def train_models(args):
         # Explicit seasonalities for hourly data
         model.add_seasonality(name="daily", period=1, fourier_order=args.daily_fourier)
         model.add_seasonality(name="weekly", period=7, fourier_order=args.weekly_fourier)
+        # Keep this
         model.add_regressor("is_weekend", standardize=False)
-        for i in range(7):
-            model.add_regressor(f"dow_{i}", standardize=False)
+
+        # Add all generated dummy regressors
+        for col in train_df.columns:
+            if col.startswith(("dow_", "hr_")):
+                model.add_regressor(col, standardize=False)
+
 
 
         if args.use_us_holidays:
