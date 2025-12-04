@@ -3,3 +3,10 @@
 Trips_2018.*
 *.zip
 Trips_2018.zip
+*.joblib
+overnight*
+artifacts*
+prophet*
+sarimax*
+*.py
+*.txt
