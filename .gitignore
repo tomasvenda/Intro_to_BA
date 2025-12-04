@@ -1,12 +1,65 @@
-*.csv
-*.parquet
-Trips_2018.*
-*.zip
-Trips_2018.zip
+# ---------------------------------------
+# Ignore EVERYTHING
+# ---------------------------------------
+*
+
+# ---------------------------------------
+# Allow only specific folders/files
+# ---------------------------------------
+
+# Keep gitignore itself
+!.gitignore
+
+# Keep README
+!README.md
+
+# Keep notebooks
+!*.ipynb
+
+# Keep Data folder
+!Data/
+Data/*
+
+# Allow project description if it exists (uncomment the one you use)
+!project_description.pdf
+!project_description.md
+
+# ---------------------------------------
+# But inside Data/ ignore everything except raw data files
+# (remove if you want entire folder)
+# ---------------------------------------
+Data/*
+!Data/**/*.csv
+!Data/**/*.parquet
+!Data/**/*.json
+!Data/**/*.xlsx
+
+# ---------------------------------------
+# Common folders to ignore no matter what
+# ---------------------------------------
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Python environments
+env/
+venv/
+.venv/
+*.env
+
+# Logs
+*.log
+
+# Model artifacts / outputs
+artifacts_*/
+preds_*/
+*.model
+*.h5
+*.pt
+*.pkl
 *.joblib
-overnight*
-artifacts*
-prophet*
-sarimax*
-*.py
-*.txt
+
+# OS files
+.DS_Store
+Thumbs.db
