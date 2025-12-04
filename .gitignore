@@ -63,3 +63,7 @@ preds_*/
 # OS files
 .DS_Store
 Thumbs.db
+
+Data/Trips_2018_cleaned.parquet
+
+Data/Trips_2018_initial_data.parquet

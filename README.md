@@ -1,6 +1,6 @@
-# Business Analytics Project - Final Submission
+# Business Analytics Project - Final Submission - Group 4
 
-This repository contains the pipeline for predicting bike sharing demand in NYC using clustering and an ensemble of machine learning models.
+This repository contains the pipeline for predicting City Bike Departures and Arrivals in NYC using clustering and an ensemble of machine learning models.
 
 ## File Descriptions
 
@@ -24,5 +24,5 @@ To ensure all dependencies and prediction files are available, please run the no
     *   `mlp_extract.ipynb`
     *   `regression_extraction.ipynb`
 
-3.  **Final Submission**
+3.  **Research Question - voting system**
     *   Run `voting.ipynb` **last**.
